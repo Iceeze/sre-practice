@@ -1,0 +1,23 @@
+[project]
+name = "sre"
+version = "0.1.0"
+description = "Учебное приложение для учёта библиотечного фонда и выдач"
+readme = "README.md"
+authors = [
+    { name = "Iceeze", email = "danichPerm2016@mail.ru" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic==1.15.2",
+    "fastapi==0.115.12",
+    "psycopg[binary]==3.2.6",
+    "sqlalchemy==2.0.40",
+    "uvicorn==0.34.2",
+]
+
+[project.scripts]
+sre = "sre:main"
+
+[build-system]
+requires = ["uv_build>=0.12.20,<0.13.0"]
+build-backend = "uv_build"

@@ -1,0 +1,13 @@
+.git
+.venv
+.uv-tool
+__pycache__
+*.pyc
+.env
+.env.*
+.vscode
+.pytest_cache
+k8s
+docs
+*.zip
+*.log

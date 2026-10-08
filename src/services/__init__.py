@@ -1,0 +1,1 @@
+"""Operations with library entities."""

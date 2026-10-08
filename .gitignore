@@ -1,0 +1,11 @@
+.env
+.venv/
+.uv-tool/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.zip
+k8s/seminar/
+
+.vscode/
+.idea/

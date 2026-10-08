@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Библиотека</title>
+  <link rel="stylesheet" href="/static/style.css?v=actions-left-1">
+  <script src="/static/app.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand"><span class="brand-mark">Б</span><span>Библиотека</span></div>
+      <span class="topbar-note">Учёт фонда и выдач</span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <div class="hero">
+      <div>
+        <p class="eyebrow">Каталог и читатели</p>
+        <h1>Управление библиотекой</h1>
+        <p class="lead">Добавляйте книги и читателей, оформляйте выдачи и отмечайте возвраты.</p>
+      </div>
+      <a class="api-link" href="/docs" target="_blank" rel="noopener noreferrer">Документация API ↗</a>
+    </div>
+
+    <nav class="tabs" aria-label="Разделы">
+      <button class="tab active" data-resource="authors" type="button">Авторы</button>
+      <button class="tab" data-resource="books" type="button">Книги</button>
+      <button class="tab" data-resource="readers" type="button">Читатели</button>
+      <button class="tab" data-resource="loans" type="button">Выдачи</button>
+    </nav>
+
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+
+    <div class="layout">
+      <section class="panel form-panel" aria-labelledby="form-title">
+        <div class="panel-head"><h2 id="form-title">Новый автор</h2><button id="cancel-edit" class="text-button" type="button" hidden>Отменить</button></div>
+        <form id="item-form">
+          <div id="fields" class="fields"></div>
+          <button id="submit-button" class="primary-button" type="submit">Добавить</button>
+        </form>
+      </section>
+
+      <section class="panel list-panel" aria-labelledby="list-title">
+        <div class="panel-head"><h2 id="list-title">Авторы</h2><span id="count" class="count">0 записей</span></div>
+        <div class="table-wrap"><table><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div>
+        <p id="empty" class="empty" hidden>Пока нет записей.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

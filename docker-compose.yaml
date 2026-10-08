@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16.8-alpine
+    ports:
+      - "127.0.0.1:${DB_PORT:-55433}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-library}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-library_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-library}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-library} -d ${POSTGRES_DB:-library}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    image: sre-library:1.0.0
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:-library_dev_password}@db:5432/${POSTGRES_DB:-library}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: sre-library:1.0.0
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:-library_dev_password}@db:5432/${POSTGRES_DB:-library}
+      PORT: ${PORT:-8000}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    stop_grace_period: 10s
+
+volumes:
+  pgdata:
