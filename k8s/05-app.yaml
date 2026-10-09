@@ -1,4 +1,3 @@
-# Применять после успешного завершения Job library-migrate (см. README.md).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

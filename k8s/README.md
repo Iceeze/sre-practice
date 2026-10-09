@@ -1,129 +1,112 @@
-# Библиотека в minikube
+# Запуск приложения в minikube
 
-Команды выполняются из корня проекта в PowerShell. Нужны Docker Desktop (Linux containers), minikube и kubectl.
-Результаты фактических проверок записаны в [VERIFICATION.md](VERIFICATION.md).
+Нужны Docker Desktop в режиме Linux containers, minikube и kubectl. Запустите Docker Desktop и откройте PowerShell в корне репозитория — там, где находится `Dockerfile`.
 
-## 1. Образ приложения
+Выполняйте шаги по порядку. После каждой команды ожидания переходите дальше только при успешном завершении. Все команды Kubernetes используют профиль `sre-docker` и namespace `library`.
 
-Один Dockerfile собирает `sre-library:1.0.0`: FastAPI, статический веб-интерфейс и Alembic.
-Миграции используют тот же образ с другой командой запуска. Для PostgreSQL используется готовый
-`postgres:16.8-alpine`, поэтому отдельный Dockerfile для БД не нужен.
-Зависимости устанавливаются из `uv.lock`; приложение запускается от UID/GID 10001.
+## 1. Подготовить кластер и образы
+
+Выполните в одном окне PowerShell:
 
 ```powershell
+minikube start -p sre-docker --driver=docker --container-runtime=docker
+kubectl config use-context sre-docker
+minikube -p sre-docker docker-env --shell powershell | Invoke-Expression
+
 docker build -t sre-library:1.0.0 .
-docker image inspect sre-library:1.0.0 --format '{{.Id}}'
+docker pull postgres:16.8-alpine
+
+docker image ls sre-library
+minikube -p sre-docker status
+kubectl get nodes
 ```
 
-В Compose сервисы `app` и `migrate` также используют этот тег.
+Дождитесь состояния узла `Ready`. Образы уже находятся в Docker-демоне minikube, поэтому отдельно загружать их через `image load` не требуется.
 
-## 2. Действия пользователя: docker-env и загрузка образа
+## 2. Подготовить namespace к развёртыванию
 
-Эти действия оставлены пользователю по условию задания.
-На момент проверки существующий профиль minikube использовал **containerd**.
-Собранный в Docker Desktop образ можно загрузить в этот профиль:
+Создайте namespace.
 
 ```powershell
-minikube image load sre-library:1.0.0
-minikube image ls
+kubectl apply -f k8s/00-namespace.yaml
 ```
 
-Для варианта из задания с Docker-демоном внутри minikube нужен кластер с Docker runtime.
-При создании такого кластера указывают `--container-runtime=docker`. Не удаляйте существующий кластер ради смены runtime:
-при необходимости создайте отдельный профиль и используйте его имя вместо `minikube` во всех командах.
-
-Эквивалент `eval $(minikube docker-env)` для PowerShell:
+## 3. Применить настройки и запустить PostgreSQL
 
 ```powershell
-& minikube -p minikube docker-env --shell powershell | Invoke-Expression
-docker build -t sre-library:1.0.0 .
+kubectl apply -f k8s/01-configmap.yaml
+kubectl apply -f k8s/02-secret.yaml
+kubectl apply -f k8s/03-postgres.yaml
+
+kubectl -n library rollout status deployment/postgres --timeout=180s
+kubectl -n library get pods -l app=library-postgres
+kubectl -n library get pvc
 ```
 
-Настройка действует только в текущем терминале. При сборке внутри Docker runtime minikube образ уже доступен кластеру.
-При локальной сборке в Docker Desktop используется `minikube image load`.
-Подробности: [официальная инструкция minikube](https://minikube.sigs.k8s.io/docs/handbook/pushing/).
-В наших манифестах `imagePullPolicy: Never` запрещает скачивание собственного образа из реестра;
-`ErrImageNeverPull` означает, что образ с нужным тегом ещё не загружен в кластер.
+Ожидается один Pod PostgreSQL с `READY 1/1`, статусом `Running` и PVC `postgres-data` со статусом `Bound`.
 
-## 3. Развёртывание приложения после загрузки образа
-
-| Файл | Ресурсы |
-|---|---|
-| `00-namespace.yaml` | namespace `library` |
-| `01-configmap.yaml` | настройки БД и сервера |
-| `02-secret.yaml` | учебный пароль БД и строка подключения |
-| `03-postgres.yaml` | PVC на 1 GiB, Service и Deployment PostgreSQL |
-| `04-migrate.yaml` | Job `alembic upgrade head` |
-| `05-app.yaml` | Deployment с двумя репликами и Service приложения |
-
-Secret содержит только учебные значения. При изменении реквизитов согласованно обновите Secret и ConfigMap.
-Для уже инициализированного PVC изменение `POSTGRES_PASSWORD` не меняет пароль внутри PostgreSQL.
-
-Выполняйте блоки по порядку. Если ожидание завершилось ошибкой, сначала устраните причину.
+## 4. Выполнить миграции базы данных
 
 ```powershell
-kubectl --context minikube apply -f k8s/00-namespace.yaml
-kubectl --context minikube apply -f k8s/01-configmap.yaml -f k8s/02-secret.yaml
-kubectl --context minikube apply -f k8s/03-postgres.yaml
-kubectl --context minikube -n library rollout status deployment/postgres --timeout=180s
+kubectl apply -f k8s/04-migrate.yaml
+
+kubectl -n library wait --for=condition=complete job/library-migrate --timeout=300s
+kubectl -n library logs job/library-migrate
+kubectl -n library get jobs
 ```
+
+Дождитесь `condition met`. У Job `library-migrate` должно быть `COMPLETIONS 1/1`.
+
+## 5. Запустить приложение
 
 ```powershell
-kubectl --context minikube apply -f k8s/04-migrate.yaml
-kubectl --context minikube -n library wait --for=condition=complete job/library-migrate --timeout=300s
-kubectl --context minikube -n library logs job/library-migrate
+kubectl apply -f k8s/05-app.yaml
 ```
+
+## 6. Проверка pods
 
 ```powershell
-kubectl --context minikube apply -f k8s/05-app.yaml
-kubectl --context minikube -n library rollout status deployment/library --timeout=180s
-kubectl --context minikube -n library get pods,svc,pvc,jobs
-kubectl --context minikube -n library port-forward service/library 8000:80
+kubectl -n library rollout status deployment/library --timeout=180s
+kubectl -n library get pods
+kubectl -n library get deployments,services,pvc,jobs
 ```
 
-Последняя команда остаётся запущенной в терминале. Откройте <http://localhost:8000/> и <http://localhost:8000/docs>.
-В другом терминале проверьте:
+## 7. Увеличить число реплик приложения с двух до четырёх
+
+```powershell
+kubectl -n library scale deployment/library --replicas=4
+kubectl -n library get pods -l app=library
+
+kubectl -n library rollout status deployment/library --timeout=180s
+kubectl -n library get deployment library
+kubectl -n library get pods
+```
+
+## 8. Открыть приложение и показать работу интерфейса
+
+В текущем терминале запустите проброс порта:
+
+```powershell
+kubectl -n library port-forward service/library 8000:80
+```
+
+Оставьте команду работающей. После появления `Forwarding from 127.0.0.1:8000` откройте **второе окно PowerShell**:
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/health/live
 Invoke-RestMethod http://localhost:8000/health/ready
-Invoke-RestMethod http://localhost:8000/api/books
+Start-Process 'http://localhost:8000/'
 ```
 
-`startupProbe` даёт серверу время запуститься; liveness проверяет процесс, readiness — доступность БД.
-Готовность БД не означает наличие схемы, поэтому ожидание Job обязательно.
-PostgreSQL имеет одну реплику и стратегию `Recreate`: два процесса БД не должны одновременно открывать один каталог данных.
-PVC использует стандартный StorageClass minikube и сохраняет данные при пересоздании Pod.
+Обе проверки должны вернуть `status: ok`.
 
-## 4. Диагностика, обновление и остановка
+## 8. Остановка приложения
+
+В первом терминале остановите `port-forward` сочетанием **Ctrl+C**. Затем остановите кластер:
 
 ```powershell
-kubectl --context minikube -n library get events --sort-by=.lastTimestamp
-kubectl --context minikube -n library describe deployment library
-kubectl --context minikube -n library logs deployment/library --all-pods=true
-kubectl --context minikube -n library logs job/library-migrate
-kubectl --context minikube -n library get endpointslices -l kubernetes.io/service-name=library
+minikube -p sre-docker docker-env --unset --shell powershell | Invoke-Expression
+minikube stop -p sre-docker
 ```
 
-При изменении исходников собирайте образ с новым тегом, загрузите его в minikube и обновите тег
-в обоих файлах `04-migrate.yaml` и `05-app.yaml`. Для повторного запуска миграции удалите только завершённый Job:
-
-```powershell
-kubectl --context minikube -n library delete job library-migrate
-kubectl --context minikube apply -f k8s/04-migrate.yaml
-kubectl --context minikube -n library wait --for=condition=complete job/library-migrate --timeout=300s
-kubectl --context minikube apply -f k8s/05-app.yaml
-kubectl --context minikube -n library rollout status deployment/library --timeout=180s
-```
-
-Миграции обновления должны быть совместимы с ещё работающей версией приложения. Если совместимости нет,
-сначала остановите приложение, уменьшив число реплик до нуля, примените миграции и затем новый Deployment.
-
-Остановка с сохранением PVC и данных:
-
-```powershell
-kubectl --context minikube -n library scale deployment library postgres --replicas=0
-```
-
-Для возобновления сначала увеличьте число реплик PostgreSQL до 1 и дождитесь готовности, затем приложения до 2.
-Удаление namespace `library` или PVC `postgres-data` удалит и сохранённые данные при стандартном StorageClass minikube.
+Данные БД сохранятся. Для следующего полного запуска повторите инструкцию с шага 1.
