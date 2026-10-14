@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.dependencies import check_database
+from src.request_logging import log_requests
 from src.routers import authors, books, loans, readers
 from src.services.base import (
     ConflictError,
@@ -14,6 +15,7 @@ from src.services.base import (
 )
 
 app = FastAPI(title="Библиотека", version="1.0.0")
+app.middleware("http")(log_requests)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

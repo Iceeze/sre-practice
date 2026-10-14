@@ -13,7 +13,7 @@ minikube start -p sre-docker --driver=docker --container-runtime=docker
 kubectl config use-context sre-docker
 minikube -p sre-docker docker-env --shell powershell | Invoke-Expression
 
-docker build -t sre-library:1.0.0 .
+docker build -t sre-library:1.1.1 .
 docker pull postgres:16.8-alpine
 
 docker image ls sre-library
@@ -100,7 +100,24 @@ Start-Process 'http://localhost:8000/'
 
 Обе проверки должны вернуть `status: ok`.
 
-## 8. Остановка приложения
+## 9. Сбор логов в VictoriaLogs
+
+Установка официальных Helm charts, проверка JSON-логов и поиск событий описаны в [logging/README.md](logging/README.md). При остановке minikube сбор логов также останавливается; PVC сохраняется до удаления тома или кластера.
+
+## Обновление приложения
+
+После изменения Python-кода соберите образ с новым тегом и обновите Deployment. Например:
+
+```powershell
+minikube -p sre-docker image build -t sre-library:1.1.1 .
+kubectl -n library set image deployment/library app=sre-library:1.1.1
+kubectl -n library rollout status deployment/library --timeout=180s
+kubectl -n library get pods -l app=library
+```
+
+`set image` сохраняет текущее число реплик. Повторное применение `05-app.yaml` вернёт число реплик к двум, указанным в файле. Если пересобираете тот же тег, после сборки выполните `kubectl -n library rollout restart deployment/library`, затем дождитесь `rollout status`. Для следующих версий обновляйте тег также в манифестах и Compose. При изменении только Python-кода переустанавливать VictoriaLogs и collector не требуется.
+
+## 10. Остановка приложения
 
 В первом терминале остановите `port-forward` сочетанием **Ctrl+C**. Затем остановите кластер:
 
@@ -109,4 +126,4 @@ minikube -p sre-docker docker-env --unset --shell powershell | Invoke-Expression
 minikube stop -p sre-docker
 ```
 
-Данные БД сохранятся. Для следующего полного запуска повторите инструкцию с шага 1.
+Данные БД сохранятся. Для возобновления существующего кластера выполните `minikube start -p sre-docker`, затем `kubectl config use-context sre-docker` и дождитесь готовности Pod. Повторно применять завершённый Job миграций при этом не нужно.

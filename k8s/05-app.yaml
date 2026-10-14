@@ -29,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: sre-library:1.0.0
+          image: sre-library:1.1.1
           imagePullPolicy: Never
           ports:
             - name: http

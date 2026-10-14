@@ -1,0 +1,36 @@
+server:
+  fullnameOverride: victoria-logs
+  mode: statefulSet
+  replicaCount: 1
+  image:
+    tag: v1.53.0
+  retentionPeriod: 7d
+  retentionDiskSpaceUsage: 4GiB
+  persistentVolume:
+    enabled: true
+    size: 5Gi
+    storageClassName: standard
+  service:
+    type: ClusterIP
+    clusterIP: ""
+    servicePort: 9428
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  extraArgs:
+    loggerFormat: json
+    memory.allowedPercent: "60"
+  probe:
+    startup:
+      httpGet:
+        path: /health
+        port: http
+      periodSeconds: 2
+      failureThreshold: 60
+
+vector:
+  enabled: false

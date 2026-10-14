@@ -1,0 +1,36 @@
+fullnameOverride: victoria-logs-collector
+image:
+  tag: v1.53.0
+
+remoteWrite:
+  - url: http://victoria-logs.logging.svc.cluster.local:9428
+    maxDiskUsagePerURL: 1GiB
+
+collector:
+  excludeFilter: 'NOT (kubernetes.pod_namespace:="library" AND kubernetes.pod_labels.app:="library" AND kubernetes.container_name:="app")'
+  timeField: [timestamp]
+  msgField: [message]
+  includePodLabels: true
+  streamFields:
+    - kubernetes.pod_namespace
+    - kubernetes.pod_name
+    - kubernetes.container_name
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+persistence:
+  volume:
+    hostPath:
+      path: /var/lib/vl-collector
+      type: DirectoryOrCreate
+
+extraArgs:
+  loggerFormat: json
+  tmpDataPath: /var/lib/vl-collector
+  memory.allowedPercent: "60"

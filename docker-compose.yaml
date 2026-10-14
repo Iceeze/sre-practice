@@ -16,7 +16,7 @@ services:
       retries: 10
 
   migrate:
-    image: sre-library:1.0.0
+    image: sre-library:1.1.1
     build: .
     command: ["alembic", "upgrade", "head"]
     environment:
@@ -27,7 +27,7 @@ services:
     restart: "no"
 
   app:
-    image: sre-library:1.0.0
+    image: sre-library:1.1.1
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:-library_dev_password}@db:5432/${POSTGRES_DB:-library}

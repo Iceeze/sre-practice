@@ -18,4 +18,4 @@ RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home a
 USER 10001:10001
 
 EXPOSE 8000
-CMD ["sh", "-c", "exec uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers ${WEB_CONCURRENCY:-1}"]
+CMD ["python", "-m", "src.server"]

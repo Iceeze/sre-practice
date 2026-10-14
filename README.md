@@ -17,21 +17,40 @@ docker compose up --build -d
 ## Kubernetes / minikube
 
 Сборка образа и развёртывание описаны в [k8s/README.md](k8s/README.md).
-Практика kubectl по материалам семинара — в [k8s/seminar/README.md](k8s/seminar/README.md).
+Схема сбора логов, установка VictoriaLogs через Helm и команды проверки — в [k8s/logging/README.md](k8s/logging/README.md).
+
+## Логирование
+
+Приложение запускается командой `python -m src.server`. Она настраивает Uvicorn и structlog: логи приложения и сервера выводятся в stdout, одна JSON-запись на строку.
+
+Каждая запись содержит `timestamp` (UTC), `level`, `message`, `service.name`. HTTP middleware добавляет `http.method`, `http.path`, `http.status_code` и `duration_ms` — время до получения ответа от обработчика. Уровень определяется статусом: 2xx/3xx — `info`, 4xx — `warning`, 5xx — `error`.
+
+Успешные запросы `/health/live` и `/health/ready` пропускаются, ошибочные записываются. Тела, параметры query string и заголовки запросов не логируются. При необработанной ошибке middleware пишет HTTP-событие со статусом 500, а Uvicorn — отдельную запись с типом исключения и позициями стека. Request ID не используется.
+
+В Kubernetes сборщик `victoria-logs-collector` (vlagent) читает логи контейнера `app` у Pod с меткой `app=library` в namespace `library` и отправляет их в VictoriaLogs. Оба Helm-релиза работают в namespace `logging`. Файлы `k8s/logging/*-values.yaml` задают параметры Helm: хранилище, ресурсы, фильтр источников и разбор JSON. В Docker Compose сборщик и VictoriaLogs не запускаются; JSON можно посмотреть командой `docker compose logs app`.
+
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `PORT` | `8000` | Порт Uvicorn |
+| `WEB_CONCURRENCY` | `1` | Количество процессов Uvicorn |
+| `LOG_LEVEL` | `INFO` | Минимальный уровень логирования |
+| `SERVICE_NAME` | `library` | Значение поля `service.name` |
+
+Для локального запуска переменные можно задать в `.env`. В Kubernetes их задают в ConfigMap `library-config`; для Compose дополнительные `LOG_LEVEL` и `SERVICE_NAME` нужно передать в `environment` сервиса `app`.
 
 ## Зависимости и локальный запуск через uv
 
 Проект использует [uv](https://docs.astral.sh/uv/). Перед локальным запуском установите uv и откройте новый терминал. Прямые зависимости объявлены в `pyproject.toml`, точные версии всех зависимостей записаны в `uv.lock`. Оба файла входят в исходный код.
 
 ```bash
-uv sync --locked
+uv sync --locked --no-install-project
 ```
 
 Для запуска Python-команд на компьютере нужен доступный PostgreSQL и переменная окружения `DATABASE_URL`. Compose публикует БД только на `127.0.0.1:55433` (порт меняется через `DB_PORT`). Добавьте `DATABASE_URL` в свой `.env` по образцу `.env.example`; если изменяли `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` или `DB_PORT`, укажите те же значения в URL. Затем выполните:
 
 ```bash
-uv run --locked --env-file .env alembic upgrade head
-uv run --locked --env-file .env uvicorn src.main:app --host 0.0.0.0 --port 8000
+uv run --locked --no-install-project --env-file .env alembic upgrade head
+uv run --locked --no-install-project --env-file .env python -m src.server
 ```
 
 Чтобы добавить или обновить зависимость, используйте `uv add <package>` или измените `pyproject.toml` и выполните `uv lock`. Команда `uv sync --locked` проверит, что lock-файл соответствует описанию проекта. В Docker зависимости также устанавливаются через `uv sync --locked`.
@@ -75,7 +94,7 @@ curl -X POST http://localhost:8000/api/authors \
 Миграции хранятся в `migrations/versions`. Для генерации новой миграции из моделей используйте доступную БД, находящуюся на текущей ревизии:
 
 ```bash
-uv run --locked --env-file .env alembic revision --autogenerate -m "описание изменения"
+uv run --locked --no-install-project --env-file .env alembic revision --autogenerate -m "описание изменения"
 ```
 
 Alembic сравнивает модели с реальной схемой БД, поэтому `DATABASE_URL` обязательна. Начальную миграцию нужно генерировать на пустой БД; последующие — на БД после применения предыдущих миграций. Сгенерированный файл следует просмотреть перед применением. Для ручного применения в запущенном окружении:
@@ -88,15 +107,21 @@ docker compose run --rm migrate
 
 ## Структура
 
-- `src/main.py` — сборка приложения, обработка ошибок и проверка состояния;
+- `src/app.py` — сборка приложения, обработка ошибок и проверка состояния;
+- `src/server.py` — запуск Uvicorn с настройками логирования;
+- `src/logging_config.py` — общие поля и JSON-формат логов;
+- `src/request_logging.py` — HTTP middleware для логирования запросов;
 - `src/routers/` — REST маршруты авторов, книг, читателей и выдач;
 - `src/services/` — общий CRUD в `base.py` и правила каждой сущности в отдельных сервисах;
 - `src/dependencies.py` — создание сервисов для обработчиков запросов;
 - `src/models.py`, `src/schemas.py` — модели БД и проверка входных данных;
+- `src/database.py` — подключение к БД и сессии SQLAlchemy;
 - `src/static/` — веб-интерфейс;
 - `migrations/` — миграции БД;
 - `pyproject.toml`, `uv.lock` — зависимости и их зафиксированные версии;
 - `docker-compose.yaml`, `Dockerfile` — запуск окружения;
+- `k8s/00-namespace.yaml` … `k8s/05-app.yaml` — namespace, настройки, PostgreSQL, миграции и приложение;
+- `k8s/logging/` — Helm values для VictoriaLogs и collector, краткая инструкция установки;
 
 ### Как устроен фронтенд
 
