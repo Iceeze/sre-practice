@@ -102,7 +102,7 @@ Start-Process 'http://localhost:8000/'
 
 ## 9. Сбор логов в VictoriaLogs
 
-Установка официальных Helm charts, проверка JSON-логов и поиск событий описаны в [logging/README.md](logging/README.md). При остановке minikube сбор логов также останавливается; PVC сохраняется до удаления тома или кластера.
+Установка официальных Helm charts, проверка JSON-логов и поиск событий описаны в [logging/README.md](logging/README.md).
 
 ## Обновление приложения
 

@@ -14,7 +14,7 @@ VictoriaLogs работает в одном экземпляре в namespace `l
 
 ## Установка в локальный minikube
 
-Нужны запущенный Docker Desktop, minikube, kubectl и Helm. Приложение с JSON-логированием должно быть развёрнуто по [инструкции Kubernetes](../README.md). Команды выполняются в PowerShell из корня проекта.
+Нужны запущенный Docker Desktop, minikube, kubectl и Helm. Приложение с JSON-логированием должно быть развёрнуто по [инструкции Kubernetes](../README.md).
 
 ```powershell
 minikube start -p sre-docker --driver=docker --container-runtime=docker
@@ -32,7 +32,7 @@ helm upgrade --install vlc vm/victoria-logs-collector --version 0.3.8 -n logging
 - [victoria-logs-values.yaml](victoria-logs-values.yaml)
 - [collector-values.yaml](collector-values.yaml)
 
-Для изменения настроек отредактируйте соответствующий файл и повторите его команду `helm upgrade --install`. Эти файлы передаются Helm через `-f`; применять их через `kubectl apply` не нужно.
+Для изменения настроек отредактируйте соответствующий файл и повторите его команду `helm upgrade --install`. Эти файлы передаются Helm через `-f`, применять их через `kubectl apply` не нужно.
 
 ## Проверка и просмотр
 
