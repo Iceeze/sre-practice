@@ -7,4 +7,5 @@ data:
   POSTGRES_USER: library
   POSTGRES_DB: library
   PORT: "8000"
+  METRICS_PORT: "8001"
   WEB_CONCURRENCY: "1"

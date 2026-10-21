@@ -1,129 +1,98 @@
-# Запуск приложения в minikube
+# Развёртывание в minikube
 
-Нужны Docker Desktop в режиме Linux containers, minikube и kubectl. Запустите Docker Desktop и откройте PowerShell в корне репозитория — там, где находится `Dockerfile`.
+Нужны Docker Desktop с Linux containers, minikube, kubectl и Helm. Все команды выполняются в PowerShell из корня проекта. После ошибки или неуспешного ожидания к следующему шагу не переходите.
 
-Выполняйте шаги по порядку. После каждой команды ожидания переходите дальше только при успешном завершении. Все команды Kubernetes используют профиль `sre-docker` и namespace `library`.
-
-## 1. Подготовить кластер и образы
-
-Выполните в одном окне PowerShell:
+## 1. Кластер и образ приложения
 
 ```powershell
 minikube start -p sre-docker --driver=docker --container-runtime=docker
 kubectl config use-context sre-docker
-minikube -p sre-docker docker-env --shell powershell | Invoke-Expression
-
-docker build -t sre-library:1.1.1 .
-docker pull postgres:16.8-alpine
-
-docker image ls sre-library
-minikube -p sre-docker status
 kubectl get nodes
+minikube -p sre-docker image build -t sre-library:1.2.0 .
 ```
 
-Дождитесь состояния узла `Ready`. Образы уже находятся в Docker-демоне minikube, поэтому отдельно загружать их через `image load` не требуется.
+Узел должен быть `Ready`. Образ собирается внутри minikube: `imagePullPolicy: Never` в манифестах приложения и миграций требует его наличия в кластере.
 
-## 2. Подготовить namespace к развёртыванию
-
-Создайте namespace.
+## 2. PostgreSQL
 
 ```powershell
 kubectl apply -f k8s/00-namespace.yaml
-```
-
-## 3. Применить настройки и запустить PostgreSQL
-
-```powershell
 kubectl apply -f k8s/01-configmap.yaml
 kubectl apply -f k8s/02-secret.yaml
 kubectl apply -f k8s/03-postgres.yaml
-
 kubectl -n library rollout status deployment/postgres --timeout=180s
-kubectl -n library get pods -l app=library-postgres
-kubectl -n library get pvc
+kubectl -n library get pods,pvc
 ```
 
-Ожидается один Pod PostgreSQL с `READY 1/1`, статусом `Running` и PVC `postgres-data` со статусом `Bound`.
+Ожидаются PVC `postgres-data` в состоянии `Bound` и Pod PostgreSQL с `READY 2/2`: БД и postgres-exporter. В `02-secret.yaml` заданы учебные реквизиты; при их изменении согласуйте пароль с `DATABASE_URL`.
 
-## 4. Выполнить миграции базы данных
+## 3. Миграции и приложение
+
+При первом развёртывании:
 
 ```powershell
 kubectl apply -f k8s/04-migrate.yaml
-
 kubectl -n library wait --for=condition=complete job/library-migrate --timeout=300s
 kubectl -n library logs job/library-migrate
-kubectl -n library get jobs
-```
-
-Дождитесь `condition met`. У Job `library-migrate` должно быть `COMPLETIONS 1/1`.
-
-## 5. Запустить приложение
-
-```powershell
 kubectl apply -f k8s/05-app.yaml
-```
-
-## 6. Проверка pods
-
-```powershell
 kubectl -n library rollout status deployment/library --timeout=180s
-kubectl -n library get pods
-kubectl -n library get deployments,services,pvc,jobs
+kubectl -n library get pods,svc
 ```
 
-## 7. Увеличить число реплик приложения с двух до четырёх
+Ожидаются две готовые реплики приложения. `library-migrate` со статусом `Completed` — нормальное состояние завершённого Job.
+
+Для повторного выполнения миграций сначала убедитесь, что предыдущий Job завершён, затем пересоздайте его:
 
 ```powershell
-kubectl -n library scale deployment/library --replicas=4
-kubectl -n library get pods -l app=library
-
-kubectl -n library rollout status deployment/library --timeout=180s
-kubectl -n library get deployment library
-kubectl -n library get pods
+kubectl -n library delete job library-migrate
+kubectl apply -f k8s/04-migrate.yaml
+kubectl -n library wait --for=condition=complete job/library-migrate --timeout=300s
 ```
 
-## 8. Открыть приложение и показать работу интерфейса
+Если схема не менялась, завершённый Job запускать заново не требуется. Не применяйте изменённый шаблон Job поверх существующего: его поля неизменяемы.
 
-В текущем терминале запустите проброс порта:
+## 4. Доступ и проверка
+
+В отдельном терминале:
 
 ```powershell
-kubectl -n library port-forward service/library 8000:80
+kubectl -n library port-forward svc/library 8000:80
 ```
 
-Оставьте команду работающей. После появления `Forwarding from 127.0.0.1:8000` откройте **второе окно PowerShell**:
+Оставьте его работающим. В другом терминале:
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/health/live
 Invoke-RestMethod http://localhost:8000/health/ready
-Start-Process 'http://localhost:8000/'
 ```
 
-Обе проверки должны вернуть `status: ok`.
+Ожидается `status: ok`. Интерфейс: [localhost:8000](http://localhost:8000/), API: [localhost:8000/docs](http://localhost:8000/docs).
 
-## 9. Сбор логов в VictoriaLogs
+## Обновление
 
-Установка официальных Helm charts, проверка JSON-логов и поиск событий описаны в [logging/README.md](logging/README.md).
-
-## Обновление приложения
-
-После изменения Python-кода соберите образ с новым тегом и обновите Deployment. Например:
+После изменения Python-кода пересоберите образ. При использовании прежнего тега перезапустите Deployment:
 
 ```powershell
-minikube -p sre-docker image build -t sre-library:1.1.1 .
-kubectl -n library set image deployment/library app=sre-library:1.1.1
+minikube -p sre-docker image build -t sre-library:1.2.0 .
+kubectl apply -f k8s/01-configmap.yaml
+kubectl apply -f k8s/05-app.yaml
+kubectl -n library rollout restart deployment/library
 kubectl -n library rollout status deployment/library --timeout=180s
-kubectl -n library get pods -l app=library
 ```
 
-`set image` сохраняет текущее число реплик. Повторное применение `05-app.yaml` вернёт число реплик к двум, указанным в файле. Если пересобираете тот же тег, после сборки выполните `kubectl -n library rollout restart deployment/library`, затем дождитесь `rollout status`. Для следующих версий обновляйте тег также в манифестах и Compose. При изменении только Python-кода переустанавливать VictoriaLogs и collector не требуется.
+Применение `05-app.yaml` устанавливает две реплики. Для нового тега обновите его в манифестах приложения и миграций и в Compose. Изменения PostgreSQL применяются отдельно через `kubectl apply -f k8s/03-postgres.yaml`; стратегия `Recreate` перезапускает Pod БД с прежним PVC.
 
-## 10. Остановка приложения
+## Метрики, логи и остановка
 
-В первом терминале остановите `port-forward` сочетанием **Ctrl+C**. Затем остановите кластер:
+- [metrics/README.md](metrics/README.md) — VictoriaMetrics в namespace `metrics`, проверка сбора и скринкаст.
+- [logging/README.md](logging/README.md) — VictoriaLogs и collector в namespace `logging`.
+
+Файлы `*-values.yaml` передаются Helm через `-f`; они не являются манифестами для `kubectl apply`. При изменении ConfigMap приложения перезапустите Deployment, чтобы обновились переменные окружения.
+
+Для остановки завершите `port-forward` через `Ctrl+C`, затем выполните:
 
 ```powershell
-minikube -p sre-docker docker-env --unset --shell powershell | Invoke-Expression
 minikube stop -p sre-docker
 ```
 
-Данные БД сохранятся. Для возобновления существующего кластера выполните `minikube start -p sre-docker`, затем `kubectl config use-context sre-docker` и дождитесь готовности Pod. Повторно применять завершённый Job миграций при этом не нужно.
+Данные сохраняются. Для продолжения работы достаточно запустить профиль, выбрать контекст и дождаться готовности Pod; переустановка и повторные миграции не нужны.

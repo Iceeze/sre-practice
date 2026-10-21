@@ -17,5 +17,5 @@ COPY alembic.ini .
 RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app
 USER 10001:10001
 
-EXPOSE 8000
+EXPOSE 8000 8001
 CMD ["python", "-m", "src.server"]

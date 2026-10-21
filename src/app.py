@@ -3,8 +3,10 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.dependencies import check_database
+from src.metrics import metrics_lifespan
 from src.request_logging import log_requests
 from src.routers import authors, books, loans, readers
 from src.services.base import (
@@ -14,8 +16,13 @@ from src.services.base import (
     ServiceError,
 )
 
-app = FastAPI(title="Библиотека", version="1.0.0")
+app = FastAPI(title="Библиотека", version="1.0.0", lifespan=metrics_lifespan)
 app.middleware("http")(log_requests)
+Instrumentator(
+    should_group_status_codes=False,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=[r"^/health/", r"^/static/"],
+).instrument(app)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 

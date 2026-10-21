@@ -16,6 +16,10 @@ spec:
       app: library
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
       labels:
         app: library
     spec:
@@ -29,11 +33,13 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: sre-library:1.1.1
+          image: sre-library:1.2.0
           imagePullPolicy: Never
           ports:
             - name: http
               containerPort: 8000
+            - name: metrics
+              containerPort: 8001
           envFrom:
             - configMapRef:
                 name: library-config

@@ -1,8 +1,9 @@
 from sqlalchemy import select
 
+from src.metrics import LOANS_CREATED, LOANS_RETURNED
 from src.models import Book, Loan, Reader
 from src.schemas import LoanData
-from src.services.base import BaseService
+from src.services.base import BaseService, NotFoundError
 
 
 class LoanService(BaseService):
@@ -17,9 +18,20 @@ class LoanService(BaseService):
 
     def create(self, data: LoanData) -> Loan:
         self._ensure_links(data)
-        return super().create(data)
+        loan = super().create(data)
+        LOANS_CREATED.inc()
+        return loan
 
     def update(self, item_id: int, data: LoanData) -> Loan:
-        self.get(item_id)
+        loan = self.db.scalar(select(Loan).where(Loan.id == item_id).with_for_update())
+        if loan is None:
+            raise NotFoundError("Запись не найдена")
+
+        was_active = loan.returned_on is None
         self._ensure_links(data)
-        return super().update(item_id, data)
+        loan = super().update(item_id, data)
+
+        if was_active and loan.returned_on is not None:
+            LOANS_RETURNED.inc()
+
+        return loan

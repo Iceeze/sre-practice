@@ -16,7 +16,7 @@ services:
       retries: 10
 
   migrate:
-    image: sre-library:1.1.1
+    image: sre-library:1.2.0
     build: .
     command: ["alembic", "upgrade", "head"]
     environment:
@@ -27,11 +27,12 @@ services:
     restart: "no"
 
   app:
-    image: sre-library:1.1.1
+    image: sre-library:1.2.0
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-library}:${POSTGRES_PASSWORD:-library_dev_password}@db:5432/${POSTGRES_DB:-library}
       PORT: ${PORT:-8000}
+      METRICS_PORT: ${METRICS_PORT:-8001}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
