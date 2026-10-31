@@ -4,6 +4,7 @@ from src.metrics import LOANS_CREATED, LOANS_RETURNED
 from src.models import Book, Loan, Reader
 from src.schemas import LoanData
 from src.services.base import BaseService, NotFoundError
+from src.slo_demo import business_operation
 
 
 class LoanService(BaseService):
@@ -16,6 +17,7 @@ class LoanService(BaseService):
         self._get(Book, data.book_id)
         self._get(Reader, data.reader_id)
 
+    @business_operation("loans")
     def create(self, data: LoanData) -> Loan:
         self._ensure_links(data)
         loan = super().create(data)

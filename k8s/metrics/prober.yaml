@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: library-prober
+  namespace: library
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: library-prober
+  template:
+    metadata:
+      labels:
+        app: library-prober
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: /metrics
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prober
+          image: sre-library:1.2.0
+          imagePullPolicy: Never
+          command: [python, -m, src.prober]
+          env:
+            - name: PROBE_URL
+              value: http://library.library.svc.cluster.local
+            - name: PROBE_INTERVAL_SECONDS
+              value: "15"
+            - name: PROBE_TIMEOUT_SECONDS
+              value: "3"
+          ports:
+            - name: metrics
+              containerPort: 8001
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 96Mi

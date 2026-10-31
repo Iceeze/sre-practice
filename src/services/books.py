@@ -2,11 +2,13 @@ from src.metrics import BOOKS_CREATED
 from src.models import Author, Book
 from src.schemas import BookData
 from src.services.base import BaseService
+from src.slo_demo import business_operation
 
 
 class BookService(BaseService):
     model = Book
 
+    @business_operation("books")
     def create(self, data: BookData) -> Book:
         self._get(Author, data.author_id)
         book = super().create(data)

@@ -32,3 +32,12 @@ async def metrics_lifespan(_app: FastAPI):
         await run_in_threadpool(server.shutdown)
         server.server_close()
         await run_in_threadpool(thread.join)
+
+
+BUSINESS_ATTEMPTS = Counter(
+    "library_business_attempts_total",
+    "Completed eligible business attempts.",
+    ["operation"],
+)
+for operation in ("books", "readers", "loans"):
+    BUSINESS_ATTEMPTS.labels(operation=operation)
