@@ -65,6 +65,9 @@ uv run --locked --no-install-project --env-file .env alembic revision --autogene
 - [k8s/README.md](k8s/README.md) — minikube, PostgreSQL, миграции и приложение.
 - [k8s/metrics/README.md](k8s/metrics/README.md) — VictoriaMetrics и команды скринкаста.
 - [k8s/logging/README.md](k8s/logging/README.md) — VictoriaLogs и сборщик логов.
-- [Отчёт4.md](Отчёт4.md) — стек, экспортёры и бизнес-метрики для ДЗ №4.
 
 Исходный код находится в `src/`: маршруты — `routers/`, операции с БД — `services/`, модели — `models.py`, схемы API — `schemas.py`, метрики — `metrics.py`, интерфейс — `static/`. Миграции находятся в `migrations/`, манифесты и Helm values — в `k8s/`.
+
+## Этапы развития проекта
+
+В [reports](reports/) хранятся отчеты по этапам развития и масштабирования данного проекта. В них можно посмотреть пояснения выбранных решений и подробности реализации.

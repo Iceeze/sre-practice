@@ -1,0 +1,50 @@
+groups:
+  - name: library-service
+    rules:
+      - alert: LibraryJourneyFailed
+        expr: |
+          WITH (
+            failures =
+              increase(library_probe_attempts_total{namespace="library",app="library-prober"}[2m])
+              - increase(library_probe_successes_total{namespace="library",app="library-prober"}[2m])
+          )
+          (failures >= 2)
+          and (library_probe_success{namespace="library",app="library-prober"} == 0)
+          and (
+            time() - library_probe_last_check_timestamp_seconds{namespace="library",app="library-prober"}
+            < 120
+          )
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Сквозной сценарий библиотеки завершился ошибкой"
+
+      - alert: LibraryBusinessOperationErrors
+        expr: |
+          WITH (
+            attempts = sum by (operation) (
+              increase(library_business_attempts_total{namespace="library",app="library"}[5m])
+            ),
+            successes =
+              label_set(sum(increase(library_books_created_total{namespace="library",app="library"}[5m])), "operation", "books")
+              or label_set(sum(increase(library_readers_registered_total{namespace="library",app="library"}[5m])), "operation", "readers")
+              or label_set(sum(increase(library_loans_created_total{namespace="library",app="library"}[5m])), "operation", "loans"),
+            failures = attempts - successes
+          )
+          (failures / attempts > 0.05) and (failures >= 3)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Выросла доля ошибок операции {{ $labels.operation }}"
+
+  - name: library-runtime
+    rules:
+      - alert: LibraryHighMemory
+        expr: 'process_resident_memory_bytes{namespace="library",app="library"} > 200Mi'
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Память Python-процесса в {{ $labels.pod }} выше 200 МиБ"

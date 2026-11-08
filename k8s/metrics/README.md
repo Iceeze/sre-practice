@@ -1,4 +1,4 @@
-# Метрики
+# Метрики и алерты
 
 VictoriaMetrics собирает метрики приложения и PostgreSQL каждые 15 секунд. Приложение и БД работают в namespace `library`, VictoriaMetrics — в `metrics`. Отдельный vmagent не требуется.
 
@@ -58,7 +58,7 @@ kubectl -n library port-forward deployment/library 8000:8000 8001:8001
 
 ## 3. Проверка сбора метрик
 
-Откройте страницу targets. В группе `kubernetes-pods` должны быть три адреса: две реплики приложения на порту `8001` и postgres-exporter на порту `9187`. Все три должны иметь состояние `UP`.
+Откройте страницу targets. В группе `kubernetes-pods` должны быть две реплики приложения на порту `8001` и postgres-exporter на порту `9187`. Если запущен `library-prober`, здесь также появится его exporter на порту `8001`. У этих targets ожидается состояние `UP`.
 
 В третьем окне получите список имён сохранённых метрик:
 
@@ -107,9 +107,39 @@ curl.exe "http://localhost:8428/api/v1/query?query=sum(library_loans_returned_to
 
 Подождите 15–30 секунд и повторите четыре команды выше. Каждый счётчик должен увеличиться на `1`, если параллельно не выполнялись другие операции.
 
+## 5. Алерты
+
+`vmalert` вычисляет [правила](library-alerts.yaml) по данным VictoriaMetrics и передаёт сработавшие алерты в Alertmanager. Два правила следят за сквозным сценарием и ошибками бизнес-операций, третье — за памятью процесса Python. В [настройках Alertmanager](alertmanager-values.yaml) получатель `ui-only` предназначен для проверки через веб-интерфейс.
+
+После установки VictoriaMetrics выполните команды из корня проекта. Они запускают пробер, загружают правила в ConfigMap и устанавливают Helm-релиз.
+
+```powershell
+kubectl apply -f k8s/metrics/prober.yaml
+kubectl -n library rollout status deployment/library-prober --timeout=180s
+
+kubectl -n metrics create configmap library-alert-rules `
+  --from-file=alert-rules.yaml=k8s/metrics/library-alerts.yaml --dry-run=client -o yaml |
+  kubectl -n metrics apply -f -
+
+helm repo update vm
+helm upgrade --install vmalert vm/victoria-metrics-alert -n metrics `
+  --reset-values -f k8s/metrics/alertmanager-values.yaml --wait --timeout 5m
+```
+
+После изменения правил повторите команду обновления ConfigMap и перезапустите Deployment, в котором работает `vmalert`.
+
+Команда `kubectl -n metrics get svc -l app.kubernetes.io/instance=vmalert` покажет имена сервисов и их порты. Подставьте эти значения и запустите каждый проброс в отдельном окне PowerShell.
+
+```powershell
+kubectl -n metrics port-forward svc/ИМЯ_VMALERT 8880:ПОРТ_VMALERT
+kubectl -n metrics port-forward svc/ИМЯ_ALERTMANAGER 9093:9093
+```
+
+Все загруженные правила видны в [Groups](http://localhost:8880/vmalert/groups), а сработавшие алерты — в [Alertmanager](http://localhost:9093/).
+
 ## Завершение и диагностика
 
-Остановите пробросы портов через `Ctrl+C` в первых двух окнах. Приложение и сбор метрик внутри кластера продолжат работать.
+Остановите открытые пробросы портов через `Ctrl+C`.
 
 Если метрики не появились, проверьте ошибки на странице targets и логи:
 

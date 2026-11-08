@@ -82,9 +82,9 @@ kubectl -n library rollout status deployment/library --timeout=180s
 
 Применение `05-app.yaml` устанавливает две реплики. Для нового тега обновите его в манифестах приложения и миграций и в Compose. Изменения PostgreSQL применяются отдельно через `kubectl apply -f k8s/03-postgres.yaml`; стратегия `Recreate` перезапускает Pod БД с прежним PVC.
 
-## Метрики, логи и остановка
+## Наблюдаемость и остановка
 
-- [metrics/README.md](metrics/README.md) — VictoriaMetrics в namespace `metrics`, проверка сбора и скринкаст.
+- [metrics/README.md](metrics/README.md) — VictoriaMetrics в namespace `metrics`.
 - [logging/README.md](logging/README.md) — VictoriaLogs и collector в namespace `logging`.
 
 Файлы `*-values.yaml` передаются Helm через `-f`; они не являются манифестами для `kubectl apply`. При изменении ConfigMap приложения перезапустите Deployment, чтобы обновились переменные окружения.

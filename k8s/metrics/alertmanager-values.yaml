@@ -1,0 +1,12 @@
+server:
+  configMap: library-alert-rules
+  datasource:
+    url: http://vmsingle-victoria-metrics-single-server:8428
+
+alertmanager:
+  enabled: true
+  config:
+    route:
+      receiver: ui-only
+    receivers:
+      - name: ui-only
